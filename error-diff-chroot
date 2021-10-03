@@ -1,0 +1,581 @@
+#!/usr/pkg/bin/perl
+use strict;
+use Getopt::Std;
+use File::Basename;
+my $dirname = dirname(__FILE__);
+push(@INC, $dirname);
+
+my $CUSTOM = 'customize.pm';
+if ( -f $dirname.'/'.$CUSTOM) { require $CUSTOM; }
+else             { die "No $CUSTOM file found:\n";}
+
+my ($PBULK_DIR, $BULKLOG_DIR) = customize::config();
+
+my $date_info; # = '20190718.1242';
+my $URL      ; # = 'http://example.com/pkgsrc/reports/current/NetBSD-8.99.47/' . $date_info . '/';
+
+my %SCORE;
+my @CHECKSUM;
+my @DEPENDS;
+my @CONFIGURE;
+my @CONFIGURE_OTHER;
+my @SUBST;
+my @INSTALL;
+my @PACKAGE;
+my @PLIST_INCONSISTENCY;
+my @INSTALL_OTHERS;
+my @SUCCESS_TO_ERROR;
+
+my $DEBUG = 0;
+
+
+our(@ARGV);
+our(%opts);
+
+my %LOGS =  ( qw(
+
+work.log       1
+pre-clean.log  2
+depends.log    4
+checksum.log   8
+configure.log 16
+build.log     32
+install.log   64
+package.log  128
+)
+);
+# checksum 23
+# install 127
+
+
+sub read_bulklog_dir ($) {
+    my $DIR = shift;
+    my @DIRS;
+    opendir(DIR, $DIR) || die __LINE__ .' '. 'problem reading ' . $DIR . "\n";
+    while (my $D = readdir(DIR) ) {
+	chomp;
+	push(@DIRS, $D); 
+   }
+    return @DIRS;
+}
+
+# PLATFORM=NetBSD 8.99.47/x86_64
+# COMPILER=gcc
+# BUILD_START_ISO=2019-07-15 22:21
+# BUILD_START_DIR=20190715.2221
+# BASE_URL=http://www.ki.nu/pkgsrc/reports/current/NetBSD-8.99.47
+# BUILD_END_ISO=2019-07-18 03:24
+sub read_status($) {
+    my ($file) = shift;
+
+    my $PLATFORM;
+    my $BUILD_START_DIR;
+    my $BUILD_START_ISO;
+    my $BASE_URL;
+    my $BUILD_END_ISO;
+
+    open(FILE, $file) || print "Problem reading file: $file: $!\n";
+    while(<FILE>) {
+	if ( /^BUILD_START_DIR=([0-9.]+)/) { $BUILD_START_DIR	= $1;}
+	if ( /^PLATFORM=(\S+)/           ) { $PLATFORM 		= $1;}
+	if ( /^BUILD_START_ISO=(.*)$/    ) { $BUILD_START_ISO	= $1;}
+	if ( /^BUILD_END_ISO=(\S+)/      ) { $BUILD_END_ISO	= $1;}
+	if ( /^BASE_URL=(\S+)/           ) { $BASE_URL		= $1;}	
+    }
+    close(FILE);
+    return  (
+       $PLATFORM,
+       $BUILD_START_ISO,
+       $BUILD_START_DIR,
+       $BASE_URL,
+       $BUILD_END_ISO,
+	);
+}
+sub parse_one_line($) {
+    my ($pkgname, $pkgversion);
+    my $string = shift;
+
+    if (/(\S+)-([0-9.]nb[0-9]+)/ ) {
+	$pkgname = $1; $pkgversion = $2;
+    } elsif (/(\S+)-([0-9.A-Za-z]+)/ ) {
+	$pkgname = $1; $pkgversion = $2;
+    }
+    return ($pkgname, $pkgversion);
+}
+# --------------------------------------------------------------------------
+#   
+#  --------------------------------------------------------------------------
+sub check_plist_inconsistency ($) {
+    my $FILE = shift;
+
+    my $FOUND   = 1;
+    my $MISSING = 2;
+    my $EXTRA   = 3;
+    my $DONE    = 4;
+
+    my $status = 0;  #  (1) report found  (2) missing found (3) extra found
+    my @EXTRA = ();
+    my @MISSING = ();
+    my $found_status = 0;
+    my $report;
+
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+
+    while(<FILE>) {
+	if (/ERROR: The following files are in the PLIST but not in/ ) {
+	    printf STDERR ("%04s missing found\n", __LINE__) if $DEBUG;
+	    $status = $MISSING;
+	} elsif (/ERROR: The following files are in .* but not in the PLIST:/){
+	    printf STDERR ("%04s extra found\n", __LINE__) if $DEBUG;
+	    $status = $EXTRA;
+	} elsif (/^\*\*\* Error code 1/) {
+	    $status = $DONE;
+	} elsif (/^ERROR: \*\*\*\*\*\*\*\*\*\*\*\*/) {
+	    next;
+	}
+	elsif  ( $status == $MISSING)  {push(@MISSING,$_)}
+	elsif  ( $status == $EXTRA  )  {push(@EXTRA,$_)}
+    }
+    close (FILE);
+
+    if     ( $#MISSING != -1 || $#EXTRA != -1 ) {
+	$report = sprintf("-%d/+%d", $#MISSING + 1, $#EXTRA + 1);
+    }
+    return $report;
+}
+sub usage() {
+    print <<HELP;
+	Not available yet, sorry
+HELP
+}
+# --------------------------------------------------------------------------
+#  0.                    M A I N 
+# -------------------------------------------------------------------------
+my $force = 0;
+my $success_error = 1;    #  success and error file are both non-
+
+getopts('fhp:u:', \%opts);
+if ($opts{'p'}) { $PBULK_DIR = $opts{'p'};}
+if ($opts{'u'}) { $URL       = $opts{'u'};}
+if ($opts{'f'}) { $force++;}
+if ($opts{'h'}) { usage(); exit;}
+
+
+my $bulklog_old = '/bulklog.old';
+my $bulklog     = '/bulklog';
+
+
+my               $error_old =  $PBULK_DIR . $bulklog_old .'/meta/error'; 
+my               $error_new =  $PBULK_DIR . $bulklog.     '/meta/error';
+
+my             $success_old =  $PBULK_DIR . $bulklog_old .'/meta/success'; 
+my             $success_new =  $PBULK_DIR . $bulklog.     '/meta/success';
+
+# print '1. ' . $PBULK_DIR,"\n";
+# print '2. ' . $error_old,"\n";
+# print '3. ' . $error_new,"\n";
+
+my %OLDerror;	# reading data
+my %NEWerror;	# reading data
+
+my @OLDerror;	# result
+my @NEWerror;	# result
+
+my %OLDsuccess;	# reading data
+my %NEWsuccess;	# reading data
+
+my @OLDsuccess;	# result
+my @NEWsuccess;	# result
+
+my $DIR
+;
+my    (    
+       $PLATFORM,
+       $BUILD_START_ISO,
+       $BUILD_START_DIR,
+       $BASE_URL,
+       $BUILD_END_ISO,
+      ) =  read_status ($BULKLOG_DIR.'/meta/status');
+
+my    (    
+       $DUMMY0,
+       $OLD_BUILD_START_ISO,
+       $DUMMY1,
+       $OLD_BUILD_END_ISO,
+       $DUMMY4,
+      ) =  read_status ($BULKLOG_DIR.'.old/meta/status');
+
+$URL = $BASE_URL . '/' . $BUILD_START_DIR .'/';
+
+my @string = 
+customize::mail_header($OLD_BUILD_START_ISO, $BUILD_START_ISO);
+
+print @string;
+
+if ( -z $success_old  &&  -z $error_old && $force == 0) {
+    print "Previous run seems strange: skip the report:\n";
+    $success_error = 0;
+}
+
+# ----------- R E A D  error F I L E ---------------
+open(BEFORE, $error_old)  || die "Cannot read: $error_old: $!\n";
+open(AFTER,  $error_new)  || die "Cannot read: $error_new: $!\n";
+
+while(<BEFORE>) {
+    my @pair =     parse_one_line($_);
+    $OLDerror{$pair[0]} = $pair[1];	# $pair[0] has name, $pair[1] has version
+}
+while(<AFTER>) {
+    my @pair =     parse_one_line($_);
+    $NEWerror{$pair[0]} = $pair[1];	# $pair[0] has name, $pair[1] has version
+}
+close (BEFORE);
+close (AFTER);
+# ----------- R E A D  error F I L E done --------------
+
+
+# ----------- R E A D  success F I L E ---------------
+open(BEFORE, $success_old)  || die "Cannot read: $success_old: $!\n";
+open(AFTER,  $success_new)  || die "Cannot read: $success_new: $!\n";
+
+while(<BEFORE>) {
+    my @pair =     parse_one_line($_);
+    $OLDsuccess{$pair[0]} = $pair[1];
+}
+while(<AFTER>) {
+    my @pair =     parse_one_line($_);
+    $NEWsuccess{$pair[0]} = $pair[1];
+}
+close (BEFORE);
+close (AFTER);
+# ----------- R E A D  success F I L E done --------------
+
+# --------------------------------------------------------
+#  R E A D   bulklog directory for problem report log
+# --------------------------------------------------------
+my @LIST = read_bulklog_dir ($BULKLOG_DIR);
+
+# print join "\n", @LIST;
+# print "\n";
+my %STATS;
+foreach my $dir (@LIST) {
+
+    if ( $dir =~ /\.$/    ) { next;}
+    if ( $dir =~ /\.\.$/  ) { next;}
+    if ( $dir =~ /^meta$/ ) { next;}    
+    if ( $dir =~ /^$/     ) { next;}    
+
+    my $target = $PBULK_DIR . '/bulklog/' . $dir;
+    opendir(D, $target) ||
+	die __LINE__ . ' ' . "problem opening dir: $target\n";
+    my $sub;
+    my @L;
+    my $score ;
+    while($sub = readdir(D)) {
+
+	if ( $sub =~ /\.$/    ) { next;}
+	if ( $sub =~ /\.\.$/  ) { next;}
+
+	$SCORE{$dir} += $LOGS{$sub};
+	$score = $SCORE{$dir};
+	push(@L, $score);
+
+    }
+    closedir(D);
+    if      ($score ==  15 ) {  # 1+2+4+8
+	push(@CHECKSUM, $dir);
+    } elsif ($score ==   7 ) {  # 1+2+4
+	push(@DEPENDS, $dir);
+    } elsif ($score ==  31 ) {  # 1+2+4+8+16
+	push(@CONFIGURE, $dir);
+    } elsif ($score == 127 ) {  # sum upto build log
+	push(@INSTALL, $dir);
+    } elsif ($score == 255 ) {  # sum upto intall log
+	push(@PACKAGE, $dir);
+    }
+}
+# - ---------------------------------------------------
+# -    \	|             |		|
+# -      \ after|	      |		|
+# -  before \	|   none      | success |  error
+# -           \ |	      |		|
+# - 	--------+-------------+---------+-----------
+# - 		|	      | 6.newly	|  2.added
+# - 	none	|     O	      |	added	|  but fail
+# - 		|	      |		|
+# - 		+-----------  +-----------+-----------
+# - 		| 4.(removed) |		|  1.newly
+# - 	success	|   (*)	      |     O	|  failed
+# - 		|	      |		|
+# - 		+-----------  +-----------+-----------
+# - 		| 3.(removed) |	 	|
+# - 	error	|   (*)	      |	5.fixed	|     O
+# - 		|	      |		|
+# - 		+-------------+-----------+-----------
+#  (*) or newly indirect failed
+#   none is not recorded for now (?), it is none, 
+my  @ADDED;
+my  @ADDED_BUT_FAIL;
+my  @SUCCESS_TO_REMOVED;
+my  @NEWLY_FAILED;
+my  @ERROR_TO_REMOVED;
+my  @ERROR_SUCCESS;
+
+my $report_URL_BASE =  $BASE_URL .'/'.        $BUILD_START_DIR ;
+my $report_URL =  $report_URL_BASE  . '/meta/report.html';
+
+print "reporting URL:\n    " . $report_URL."\n\n";
+
+print <<CAVEAT;
+    This is the simple error diff report. If the same package names (from the hyphen(-) and digit, to the left) exist,
+  the infomation here (success and error relations) becomes inaccurate, for example, following case,
+        cyrus-imapd-2.3.18nb32
+	cyrus-imapd-2.2.13p1nb20
+	cyrus-imapd-2.4.20nb8
+  sorry, still debugging..
+
+CAVEAT
+my $count = 0;
+#  # ------------------------------------------------------
+#  #   1.  @NEWLY_FAILED
+#  #  ------------------------------------------------------
+#  print '--- Was success but failed this time  ---- (' , $#NEWLY_FAILED + 1 , ")\n";
+#  foreach my $n (sort @NEWLY_FAILED) {
+#      print ' ' . $n . '-'.$OLDsuccess{$n}."\n";
+#  }
+#  print "\n";
+
+foreach my $i (keys %OLDsuccess) {
+    if ($NEWerror{$i} ne '') {
+# ------------------------------------------------------
+#   1.  @SUCCESS_TO_ERROR
+#  ------------------------------------------------------
+	my $error_log = $BULKLOG_DIR .'/' . $i .'-'. $NEWerror{$i};
+#	if (! -d $error_log ) { next;}  # the same name issue XXXXXXXXXXXXXXXXX
+	if ($NEWerror{$i} eq  $OLDerror{$i} ) { next;}
+	push(@SUCCESS_TO_ERROR, $i);
+    }
+    if ( $NEWsuccess{$i} eq '' &&  $NEWerror{$i} eq '')  {
+# ------------------------------------------------------
+#   4.  @SUCCESS_TO_REMOVED
+#  ------------------------------------------------------
+	push(@SUCCESS_TO_REMOVED, $i); 
+    }
+}
+$count = 0;
+if ($success_error) {
+print '--- 1. Previous success but  error at this time ---- (' , $#SUCCESS_TO_ERROR + 1 , ")\n";
+foreach my $n (sort @SUCCESS_TO_ERROR) {
+    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+    print ' ' . $report_URL_BASE .'/'. $n . '-'.$NEWerror{$n}."?C=M;O=D\n";
+}
+print "\n";
+}
+# ------------------------------------------------------
+#   2.  @ADDED_BUT_FAIL
+#  ------------------------------------------------------
+
+foreach my $i (keys %NEWerror) {
+    if ($OLDsuccess{$i} eq '' && $OLDerror{$i} eq '') {
+	push(@ADDED_BUT_FAIL, $i);
+    }
+}
+if ($success_error) {
+print '--- 2. Dependency became OK or newly added, but failed to package ---- (' , $#ADDED_BUT_FAIL + 1, ")\n";
+$count = 0;
+foreach my $n (sort @ADDED_BUT_FAIL) {
+    print ' ' . $report_URL_BASE .'/'. $n . '-'.$NEWerror{$n}."?C=M;O=D\n";
+    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+print "\n";
+}
+# ------------------------------------------------------
+#   3.  @ERROR_TO_REMOVED,   @ERROR_SUCCESS
+#  ------------------------------------------------------
+
+foreach my $i (keys %OLDerror) {
+    if ($NEWsuccess{$i}) {
+	my $error_log = $BULKLOG_DIR .'/' . $i .'-'. $NEWsuccess{$i};
+
+	if ( -d $error_log ) { next;}  # the same name issue XXXXXXXXXXXXXXXXX
+#	print STDERR __LINE__ . ' ' . $error_log," ****\n";
+	if ( $OLDerror{$i} !=  $NEWsuccess{$i} ) { next;}
+#	print STDERR __LINE__ . ' ' . $error_log,"\n";
+	push(@ERROR_SUCCESS, $i.'-'. $NEWsuccess{$i});  # gone away, or new error
+    } elsif ($NEWsuccess{$i} eq '' && $NEWerror{$i} eq '' ) {
+	push(@ERROR_TO_REMOVED, $i); 
+    }
+}
+if ($success_error) {
+print '--- 3. Previous error and not packaged this time  (Re: indirect fail ?) ---- (' , $#ERROR_TO_REMOVED + 1 , ")\n";
+
+$count = 0;
+foreach my $n (sort @ERROR_TO_REMOVED) {
+    if (grep /$n/, @CHECKSUM ) { next;}
+    if ($count ++ > 10) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+    print ' ' . $n . '-'. $OLDerror{$n}."\n";
+}
+print "\n";
+}
+
+$count = 0;
+print '--- 4. Success before but not packaged this time (Re: indirect fail ?) ---- (' , $#SUCCESS_TO_REMOVED + 1 , ")\n";
+foreach my $n (sort @SUCCESS_TO_REMOVED) {
+    if ($count ++ > 10) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+    print ' ' . $n . '-'.$OLDsuccess{$n}."\n";
+}
+print "\n";
+# ------------------------------------------------------
+#   5.  @ERROR_SUCCESS
+#  ------------------------------------------------------
+
+print '--- 5. Fixed this time  (error -> success)  --- (' , $#ERROR_SUCCESS + 1 , ")\n";
+foreach my $n (sort @ERROR_SUCCESS) {
+    print ' ' . $n."\n";
+}
+print "\n";
+# ------------------------------------------------------
+#   6.  @ADDED
+#  ------------------------------------------------------
+
+foreach my $i (keys %NEWsuccess) {
+    if ($OLDsuccess{$i} eq '') {
+	if (grep  /$i/, @ERROR_SUCCESS) { next;}
+	push(@ADDED, $i);
+     }
+}
+print '--- 6. (none -> )  Success (Newly, or packaged again from indirect fail) ----(' , $#ADDED + 1 , ")\n";
+$count = 0;
+foreach my $n (sort @ADDED) {
+#   print ' ' . $report_URL_BASE .'/'. $n . '-'.$NEWsuccess{$n}."?C=M;O=D\n";
+    print ' ' . $n . '-' .$NEWsuccess{$n}."\n";
+    if ($count ++ > 10) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+
+print "\n";
+# ------------------------------------------------------
+print '--- Checksum stage error  ---- (' , $#CHECKSUM + 1, ")\n";
+#  ------------------------------------------------------
+
+foreach my $i (@CHECKSUM) {
+    print $URL . $i. '/checksum.log'. "\n";}
+print "\n";
+
+# ------------------------------------------------------
+print '--- Depends stage error  ---- (' , $#DEPENDS + 1, ")\n";
+# ------------------------------------------------------
+foreach my $i (@DEPENDS) {
+    print $URL . $i. '/depends.log'. "\n";}
+print "\n";
+sub check_subst($) {
+    my ($file) = shift;
+    my $found = 0;
+    open(FILE, $file);
+    while(<FILE>){
+	if (/WARNING: \[subst.mk:init\] Nothing/) { $found++;}
+	if (/ERROR: (\[subst.mk:.*\])/) { $found = $1;}
+    }
+    close(FILE);
+    return $found;
+}
+foreach my $i (@CONFIGURE)  {
+    my $report = check_subst ( $BULKLOG_DIR. '/'. $i."/configure.log");
+
+    if ($report ) { push(@SUBST, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
+    else          { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
+}
+print '--- SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
+     print @SUBST ; print "\n";
+print '--- OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+           @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
+     print @CONFIGURE_OTHER ; print "\n";
+
+#print '--- Install stage error  ---- (' , $#INSTALL + 1, ")\n";
+@SUBST = ();
+
+foreach my $i ( @INSTALL)  {
+    if (my $report = check_plist_inconsistency ($BULKLOG_DIR. '/'. $i."/install.log")) {
+	push(@PLIST_INCONSISTENCY, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
+    } else {
+	my $report = check_subst ( $BULKLOG_DIR. '/'. $i."/install.log");    
+	if ($report ) { push(@SUBST, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report))}
+	else          {
+	    push(@INSTALL_OTHERS, $URL. $i."/install.log\n") 
+	}
+    }
+}
+# ---------------------------------
+sub by_count($$) {
+    my $a   = shift;
+    my $b   = shift;
+    my $aa  = (split(' ', $a))[1];
+    my $bb  = (split(' ', $b))[1];
+    my @aaa = split('/', $aa);
+    my @bbb = split('/', $bb);
+    my $aaaa = $aaa[1] + $aaa[0];
+    my $bbbb = $bbb[1] + $bbb[0];
+    return $bbbb <=> $aaaa;
+}
+# ---------------------------------
+@PLIST_INCONSISTENCY = sort { by_count($a, $b) } @PLIST_INCONSISTENCY;
+# ------------------------------------------------------
+print '--- Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 1, ")   missing/extra\n";
+# ------------------------------------------------------
+    print @PLIST_INCONSISTENCY;
+    print "\n";
+
+print '--- SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
+     print @SUBST ; print "\n";
+
+# ------------------------------------------------------
+print '--- Other install stage error  ---- (' , $#INSTALL_OTHERS + 1, ")\n";
+# ------------------------------------------------------
+$count = 0;
+foreach my $i (0..$#INSTALL_OTHERS) {
+    print $INSTALL_OTHERS[$i];
+    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+print "\n";
+# ------------------------------------------------------
+print '--- Package stage error  ---- (' , $#PACKAGE + 1, ")\n";
+# ------------------------------------------------------
+foreach my $i (@PACKAGE) {
+    print $URL . $i. '/package.log'. "\n";}
+print "\n";
+
+exit;
+__DATA__
+php56-pear-MDB2_Driver_mysql-1.5.0b4
+horde-3.3.13nb4
+ampache-3.5.3nb3
+py37-zipp-0.5.1
+py36-zipp-0.5.1
+modular-xorg-server-1.20.4
+mono-4.0.4.1nb16
+gnustep-base-1.24.0nb22
+eet-1.7.7nb2
+__END__
+
+pkgsrc@makoto 21:22:01/190718(..CHROOT/P)% cat  bulklog/meta/status
+PLATFORM=NetBSD 8.99.47/x86_64
+COPMILER=gcc
+BUILD_START_ISO=2019-07-15 22:21
+BUILD_START_DIR=20190715.2221
+BASE_URL=http://www.ki.nu/pkgsrc/reports/current/NetBSD-8.99.47
+BUILD_END_ISO=2019-07-18 03:24
+
+
+work.log
+pre-clean.log
+depends.log
+checksum.log
+configure.log
+build.log
+
+
+# ------------------------------------------------------
+#   4.  @SUCCESS_TO_REMOVED
+#  ------------------------------------------------------
+Local variables:
+outline-regexp: "^[ 	]*sub\\s-+\\([-[:alnum:]+_:]+\\)\\|^\\(?:my\\|our\\)\\s-+\\([$@%][-[:alnum:]+_:]+\\)\\s-*=\\|^[ 	]*package\\s-+\\([-[:alnum:]+_:]+\\);\\|^=head[0-9][ 	]+\\(.*\\)\\|^=cut\\>\\|^#\s+[0-9]\.\\|^# - \\|^# --------------\\|print '--- "
+End:
