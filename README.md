@@ -5,10 +5,10 @@
 3.
   test with following command 
 
-  PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \
-  bulkbuild \
+  PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \\  \
+  bulkbuild \\
   &&
-  /PATH/TO/pbulk-diff-report > /tmp/mail
+  /PATH/TO/perl/pbulk-diff-report > /tmp/mail
 
 4. If above 3 looks good, EITHER
 
@@ -16,8 +16,8 @@
 
   OR
 
-  PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \
-  bulkbuild \
+  PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \\ \
+  bulkbuild \\
   &&
-  /PATH/TO/pbulk-diff-report | /usr/sbin/sendmail -t
+  /PATH/TO/perl/pbulk-diff-report | /usr/sbin/sendmail -t
  
