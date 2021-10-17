@@ -2,13 +2,12 @@
 
 1. copy config-sample.pm config.pm
 2. Customize config.pm for your need
-3.
-  test with following command 
+3.  test with following command 
 
   PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \\  \
-  bulkbuild \\
+  bulkbuild 
   &&
-  /PATH/TO/perl/pbulk-diff-report > /tmp/mail
+  /usr/pkg_bulk/bin/perl /PATH/TO/perl/pbulk-diff-report > /tmp/mail
 
 4. If above 3 looks good, EITHER
 
@@ -17,7 +16,7 @@
   OR
 
   PATH=/usr/pkg_bulk/bin:/usr/pkg_bulk/sbin:${PATH} \\ \
-  bulkbuild \\
+  bulkbuild
   &&
-  /PATH/TO/perl/pbulk-diff-report | /usr/sbin/sendmail -t
+  /usr/pkg_bulk/bin/perl /PATH/TO/perl/pbulk-diff-report | /usr/sbin/sendmail -t
  
