@@ -24,6 +24,7 @@ my @INSTALL;
 my @PACKAGE;
 my @PLIST_INCONSISTENCY;
 my @INSTALL_OTHERS;
+my @INSTALL_RELRO;
 my @SUCCESS_TO_ERROR;
 
 my $DEBUG = 0;
@@ -141,6 +142,18 @@ sub check_plist_inconsistency ($) {
     if     ( $#MISSING != -1 || $#EXTRA != -1 ) {
 	$report = sprintf("-%d/+%d", $#MISSING + 1, $#EXTRA + 1);
     }
+    return $report;
+}
+sub check_RELRO ($) {
+    my $FILE = shift;
+    my $report;
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {    
+	if (/ERROR: (.*): missing RELRO/ ) {
+	    $report = $1;
+	}
+    }
+    close (FILE);
     return $report;
 }
 sub usage() {
@@ -494,14 +507,17 @@ print '--- OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 @SUBST = ();
 
 foreach my $i ( @INSTALL)  {
-    if (my $report = check_plist_inconsistency ($BULKLOG_DIR. '/'. $i."/install.log")) {
+    my $report;
+    if ( $report = check_plist_inconsistency ($BULKLOG_DIR. '/'. $i."/install.log") ) {
 	push(@PLIST_INCONSISTENCY, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
+    } elsif 
+       ( $report = check_subst ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
+        push(@SUBST, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
+    } elsif
+       ( $report = check_RELRO ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
+	push(@INSTALL_RELRO, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
     } else {
-	my $report = check_subst ( $BULKLOG_DIR. '/'. $i."/install.log");    
-	if ($report ) { push(@SUBST, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report))}
-	else          {
-	    push(@INSTALL_OTHERS, $URL. $i."/install.log\n") 
-	}
+	push(@INSTALL_OTHERS, $URL. $i."/install.log\n");
     }
 }
 # ---------------------------------
@@ -526,6 +542,16 @@ print '--- Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 
 
 print '--- SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
+
+# ------------------------------------------------------
+print '--- RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
+# ------------------------------------------------------
+$count = 0;
+foreach my $i (0..$#INSTALL_RELRO) {
+    print $INSTALL_RELRO[$i];
+    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+print "\n";
 
 # ------------------------------------------------------
 print '--- Other install stage error  ---- (' , $#INSTALL_OTHERS + 1, ")\n";
