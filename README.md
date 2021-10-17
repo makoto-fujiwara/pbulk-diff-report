@@ -9,7 +9,7 @@
   &&
   /usr/pkg_bulk/bin/perl /PATH/TO/perl/pbulk-diff-report > /tmp/mail
 
-4. If above 3 looks good, EITHER
+4. If above step 3. looks good, EITHER
 
   cat /tmp/mail | /usr/sbin/sendmail -t
 
