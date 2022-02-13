@@ -144,6 +144,18 @@ sub check_plist_inconsistency ($) {
     }
     return $report;
 }
+sub check_subst($) {
+    my ($file) = shift;
+    my $found = 0;
+    open(FILE, $file);
+    while(<FILE>){
+	if (/WARNING: \[subst.mk:init\] Nothing/) { $found++;}
+	if (/ERROR: (\[subst.mk:.*\])/) { $found = $1;}
+    }
+    close(FILE);
+    return $found;
+}
+
 sub check_RELRO ($) {
     my $FILE = shift;
     my $report;
@@ -156,6 +168,19 @@ sub check_RELRO ($) {
     close (FILE);
     return $report;
 }
+# ---------------------------------
+sub by_count($$) {
+    my $a   = shift;
+    my $b   = shift;
+    my $aa  = (split(' ', $a))[1];
+    my $bb  = (split(' ', $b))[1];
+    my @aaa = split('/', $aa);
+    my @bbb = split('/', $bb);
+    my $aaaa = $aaa[1] + $aaa[0];
+    my $bbbb = $bbb[1] + $bbb[0];
+    return $bbbb <=> $aaaa;
+}
+
 sub usage() {
     print <<HELP;
 	Not available yet, sorry
@@ -486,17 +511,7 @@ print '---8. Depends stage error  ---- (' , $#DEPENDS + 1, ")\n";
 foreach my $i (@DEPENDS) {
     print $URL . $i. '/depends.log'. "\n";}
 print "\n";
-sub check_subst($) {
-    my ($file) = shift;
-    my $found = 0;
-    open(FILE, $file);
-    while(<FILE>){
-	if (/WARNING: \[subst.mk:init\] Nothing/) { $found++;}
-	if (/ERROR: (\[subst.mk:.*\])/) { $found = $1;}
-    }
-    close(FILE);
-    return $found;
-}
+
 foreach my $i (@CONFIGURE)  {
     my $report = check_subst ( $BULKLOG_DIR. '/'. $i."/configure.log");
 
@@ -525,18 +540,6 @@ foreach my $i ( @INSTALL)  {
     } else {
 	push(@INSTALL_OTHERS, $URL. $i."/install.log\n");
     }
-}
-# ---------------------------------
-sub by_count($$) {
-    my $a   = shift;
-    my $b   = shift;
-    my $aa  = (split(' ', $a))[1];
-    my $bb  = (split(' ', $b))[1];
-    my @aaa = split('/', $aa);
-    my @bbb = split('/', $bb);
-    my $aaaa = $aaa[1] + $aaa[0];
-    my $bbbb = $bbb[1] + $bbb[0];
-    return $bbbb <=> $aaaa;
 }
 # ---------------------------------
 @PLIST_INCONSISTENCY = sort { by_count($a, $b) } @PLIST_INCONSISTENCY;
