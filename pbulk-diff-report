@@ -19,10 +19,8 @@ my @CHECKSUM;
 my @DEPENDS;
 my @CONFIGURE;
 my @CONFIGURE_OTHER;
-my @SUBST;
 my @INSTALL;
 my @PACKAGE;
-my @PLIST_INCONSISTENCY;
 my @INSTALL_OTHERS;
 my @INSTALL_RELRO;
 my @SUCCESS_TO_ERROR;
@@ -167,6 +165,18 @@ sub check_RELRO ($) {
     }
     close (FILE);
     return $report;
+}
+sub check_not_a_PIE ($) {
+    my $FILE = shift;
+    my $found = 0;
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {    
+	if (/ERROR: (.*): not a PIE/ ) {
+	    $found++;
+	}
+    }
+    close (FILE);
+    return $found;
 }
 # ---------------------------------
 sub by_count($$) {
@@ -512,20 +522,28 @@ foreach my $i (@DEPENDS) {
     print $URL . $i. '/depends.log'. "\n";}
 print "\n";
 
+my @SUBST;
+
 foreach my $i (@CONFIGURE)  {
     my $report = check_subst ( $BULKLOG_DIR. '/'. $i."/configure.log");
 
     if ($report ) { push(@SUBST, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
     else          { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
+# ------------------------------------------------------
 print '---9. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
+
 print '---10. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+
            @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
      print @CONFIGURE_OTHER ; print "\n";
 
 #print '---. Install stage error  ---- (' , $#INSTALL + 1, ")\n";
 @SUBST = ();
+
+my @PLIST_INCONSISTENCY;
+my @INSTALL_not_a_PIE;
 
 foreach my $i ( @INSTALL)  {
     my $report;
@@ -537,6 +555,9 @@ foreach my $i ( @INSTALL)  {
     } elsif
        ( $report = check_RELRO ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
 	push(@INSTALL_RELRO, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
+    } elsif
+       ( $report = check_not_a_PIE ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
+	push(@INSTALL_not_a_PIE, sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
     } else {
 	push(@INSTALL_OTHERS, $URL. $i."/install.log\n");
     }
@@ -558,6 +579,16 @@ print '---13. RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
 $count = 0;
 foreach my $i (0..$#INSTALL_RELRO) {
     print $INSTALL_RELRO[$i];
+    if ($count ++ > 30) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+print "\n";
+
+# ------------------------------------------------------
+print '---14. not a PIE install stage error  ---- (' , $#INSTALL_not_a_PIE + 1, ")\n";
+# ------------------------------------------------------
+$count = 0;
+foreach my $i (0..$#INSTALL_not_a_PIE) {
+    print $INSTALL_not_a_PIE[$i];
     if ($count ++ > 30) { print "    ... too many, omitting  rest of the list ..\n"; last;}
 }
 print "\n";
