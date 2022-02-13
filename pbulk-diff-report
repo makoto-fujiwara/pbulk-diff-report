@@ -441,9 +441,10 @@ print "\n";
 # ------------------------------------------------------
 #   5.  @ERROR_SUCCESS
 #  ------------------------------------------------------
-
+$count = 0;
 print '--- 5. Fixed this time  (error -> success)  --- (' , $#ERROR_SUCCESS + 1 , ")\n";
 foreach my $n (sort @ERROR_SUCCESS) {
+    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
     print ' ' . $n."\n";
 }
 print "\n";
@@ -467,7 +468,7 @@ foreach my $n (sort @ADDED) {
 
 print "\n";
 # ------------------------------------------------------
-print '--- Checksum stage error  ---- (' , $#CHECKSUM + 1, ")\n";
+print '---7. Checksum stage error  ---- (' , $#CHECKSUM + 1, ")\n";
 #  ------------------------------------------------------
 
 foreach my $i (@CHECKSUM) {
@@ -475,7 +476,7 @@ foreach my $i (@CHECKSUM) {
 print "\n";
 
 # ------------------------------------------------------
-print '--- Depends stage error  ---- (' , $#DEPENDS + 1, ")\n";
+print '---8. Depends stage error  ---- (' , $#DEPENDS + 1, ")\n";
 # ------------------------------------------------------
 foreach my $i (@DEPENDS) {
     print $URL . $i. '/depends.log'. "\n";}
@@ -497,13 +498,13 @@ foreach my $i (@CONFIGURE)  {
     if ($report ) { push(@SUBST, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
     else          { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
-print '--- SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
+print '---9. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
-print '--- OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+print '---10. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
            @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
      print @CONFIGURE_OTHER ; print "\n";
 
-#print '--- Install stage error  ---- (' , $#INSTALL + 1, ")\n";
+#print '---. Install stage error  ---- (' , $#INSTALL + 1, ")\n";
 @SUBST = ();
 
 foreach my $i ( @INSTALL)  {
@@ -535,21 +536,21 @@ sub by_count($$) {
 # ---------------------------------
 @PLIST_INCONSISTENCY = sort { by_count($a, $b) } @PLIST_INCONSISTENCY;
 # ------------------------------------------------------
-print '--- Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 1, ")   missing/extra\n";
+print '---11. Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 1, ")   missing/extra\n";
 # ------------------------------------------------------
     print @PLIST_INCONSISTENCY;
     print "\n";
 
-print '--- SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
+print '---12. SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
 
 # ------------------------------------------------------
-print '--- RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
+print '---13. RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
 # ------------------------------------------------------
 $count = 0;
 foreach my $i (0..$#INSTALL_RELRO) {
     print $INSTALL_RELRO[$i];
-    if ($count ++ > 20) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+    if ($count ++ > 30) { print "    ... too many, omitting  rest of the list ..\n"; last;}
 }
 print "\n";
 
