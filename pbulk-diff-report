@@ -171,9 +171,8 @@ sub check_not_a_PIE ($) {
     my $found = 0;
     open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
     while(<FILE>) {    
-	if (/ERROR: (.*): not a PIE/ ) {
-	    $found++;
-	}
+	if (/ERROR: (.*): not a PIE/ ) { $found++; }
+	if (/ERROR: (.*): is not a Position Independent Executable/ ) { $found++; }
     }
     close (FILE);
     return $found;
@@ -584,7 +583,7 @@ foreach my $i (0..$#INSTALL_RELRO) {
 print "\n";
 
 # ------------------------------------------------------
-print '---14. not a PIE install stage error  ---- (' , $#INSTALL_not_a_PIE + 1, ")\n";
+print '---14. not a PIE (or not a Position Independent Executable)  ---- (' , $#INSTALL_not_a_PIE + 1, ")\n";
 # ------------------------------------------------------
 $count = 0;
 foreach my $i (0..$#INSTALL_not_a_PIE) {
