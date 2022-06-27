@@ -545,12 +545,12 @@ foreach my $i (@CONFIGURE)  {
     else          { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
 # ------------------------------------------------------
-print '---9. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
+print '---9a. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
-print '---9a. Compiler can not create executable ---- (' , $#COMPILER_CAN_NOT + 1, ")\n";
+print '---9b. Compiler can not create executable ---- (' , $#COMPILER_CAN_NOT + 1, ")\n";
      print @COMPILER_CAN_NOT ; print "\n";
 
-print '---10. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+print '---9c. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 
            @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
      print @CONFIGURE_OTHER ; print "\n";
@@ -581,16 +581,16 @@ foreach my $i ( @INSTALL)  {
 # ---------------------------------
 @PLIST_INCONSISTENCY = sort { by_count($a, $b) } @PLIST_INCONSISTENCY;
 # ------------------------------------------------------
-print '---11. Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 1, ")   missing/extra\n";
+print '---11a. Install stage PLIST inconsistency  ---- (' , $#PLIST_INCONSISTENCY + 1, ")   missing/extra\n";
 # ------------------------------------------------------
     print @PLIST_INCONSISTENCY;
     print "\n";
 
-print '---12. SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
+print '---11b. SUBST error at install stage ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
 
 # ------------------------------------------------------
-print '---13. RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
+print '---11c. RELRO install stage error  ---- (' , $#INSTALL_RELRO + 1, ")\n";
 # ------------------------------------------------------
 $count = 0;
 foreach my $i (0..$#INSTALL_RELRO) {
@@ -600,7 +600,7 @@ foreach my $i (0..$#INSTALL_RELRO) {
 print "\n";
 
 # ------------------------------------------------------
-print '---14. not a PIE (or not a Position Independent Executable)  ---- (' , $#INSTALL_not_a_PIE + 1, ")\n";
+print '---11d. not a PIE (or not a Position Independent Executable)  ---- (' , $#INSTALL_not_a_PIE + 1, ")\n";
 # ------------------------------------------------------
 $count = 0;
 foreach my $i (0..$#INSTALL_not_a_PIE) {
