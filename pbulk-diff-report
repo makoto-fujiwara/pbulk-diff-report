@@ -7,7 +7,7 @@ push(@INC, $dirname);
 
 my $CUSTOM = 'customize.pm';
 if ( -f $dirname.'/'.$CUSTOM) { require $CUSTOM; }
-else             { die "No $CUSTOM file found:\n";}
+else             { die "No $CUSTOM file found in $dirname\n";}
 
 my ($PBULK_DIR, $BULKLOG_DIR) = customize::config();
 
@@ -196,6 +196,20 @@ sub compiler_can_not_create ($) {
     while(<FILE>) {
 	if (/configure: error: C compiler cannot create executables/ ) {
 	    $report++;
+	}
+    }
+    close (FILE);
+    return $report;
+}
+sub different_version ($) {
+    my $FILE = shift;
+    my $report = '';
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {
+# pkg_add: A different version of mpg123-1.30.1 is already installed: mpg123-1.30.1nb1
+
+	if (/^pkg_add: A different version of (.*) is already installed: (.*)/) {
+	    $report = $1 . ' <- ' .$2;
 	}
     }
     close (FILE);
@@ -539,10 +553,21 @@ foreach my $i (@CHECKSUM) {
 print "\n";
 
 # ------------------------------------------------------
-print '---8. Depends stage error  ---- (' , $#DEPENDS + 1, ")\n";
+
 # ------------------------------------------------------
+my @DIFFERENT_VERSION;
+my @DEPENDS_OTHER;
 foreach my $i (@DEPENDS) {
-    print $URL . $i. '/depends.log'. "\n";}
+    my $report = '';
+    my $different_version = different_version( $BULKLOG_DIR. '/'. $i."/depends.log");
+    if ($different_version) { push(@DIFFERENT_VERSION, sprintf("%s%s/depends.log\t %s\n", $URL, $i, $report))}
+    else                    { push(@DEPENDS_OTHER, $i);}
+}
+print '---8a. Different version  ---- (' , $#DIFFERENT_VERSION + 1, ")\n";
+print '---8. Depends stage error  ---- (' , $#DEPENDS_OTHER + 1, ")\n";
+
+foreach my $i (@DEPENDS_OTHER) {
+  print $URL . $i. '/depends.log'. "\n";}
 print "\n";
 
 my @SUBST;
