@@ -414,7 +414,7 @@ print "reporting URL:\n    " . $report_URL."\n\n";
 
 print <<CAVEAT;
     This is the simple error diff report. If the same package names (from the hyphen(-) and digit, to the left) exist,
-  the infomation here (success and error relations) becomes inaccurate, for example, following case,
+  the information here (success and error relations) becomes inaccurate, for example, following case,
         cyrus-imapd-2.3.18nb32
 	cyrus-imapd-2.2.13p1nb20
 	cyrus-imapd-2.4.20nb8
