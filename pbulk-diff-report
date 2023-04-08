@@ -542,18 +542,6 @@ foreach my $n (sort @ADDED) {
 print "\n";
 # ------------------------------------------------------
 #   7.  Checksum stage error  ----
-#  ------------------------------------------------------
-
-# ------------------------------------------------------
-print '---7. Checksum stage error  ---- (' , $#CHECKSUM + 1, ")\n";
-#  ------------------------------------------------------
-
-foreach my $i (@CHECKSUM) {
-    print $URL . $i. '/checksum.log'. "\n";}
-print "\n";
-
-# ------------------------------------------------------
-
 # ------------------------------------------------------
 my @DIFFERENT_VERSION;
 my @DEPENDS_OTHER;
@@ -580,6 +568,18 @@ foreach my $i (@CONFIGURE)  {
     elsif ($compiler ) { push(@COMPILER_CAN_NOT, sprintf("%s%s/configure.log\n",      $URL, $i         ))}
     else               { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
+
+# ------------------------------------------------------
+#   8.  Checksum stage error  ----
+#  ------------------------------------------------------
+print '---8. Checksum stage error  ---- (' , $#CHECKSUM + 1, ")\n";
+#  ------------------------------------------------------
+
+foreach my $i (@CHECKSUM) {
+    print $URL . $i. '/checksum.log'. "\n";}
+print "\n";
+
+
 # -------------------------------
 print '---9a. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
