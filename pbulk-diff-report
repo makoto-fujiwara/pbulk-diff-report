@@ -31,8 +31,8 @@ my $DEBUG = 0;
 our(@ARGV);
 our(%opts);
 
+# weight for each stage to judge the failing one
 my %LOGS =  ( qw(
-
 work.log       1
 pre-clean.log  2
 depends.log    4
@@ -43,8 +43,9 @@ install.log   64
 package.log  128
 )
 );
-# checksum 23
-# install 127
+# resultant sum
+#    checksum 23
+#    install 127
 
 
 sub read_bulklog_dir ($) {
@@ -64,6 +65,7 @@ sub read_bulklog_dir ($) {
 # BUILD_START_DIR=20190715.2221
 # BASE_URL=http://www.ki.nu/pkgsrc/reports/current/NetBSD-8.99.47
 # BUILD_END_ISO=2019-07-18 03:24
+
 sub read_status($) {
     my ($file) = shift;
 
@@ -213,6 +215,18 @@ sub reduce_depends ($) {
     close (FILE);
     return $report;
 }
+sub install_interpreter ($) {
+    my $FILE = shift;
+    my %report = '';
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {
+	if (/ERROR: \[check-interpreter.mk\] The interpreter "(.*)" of/ ) {
+	    $report{$1}++;
+	}
+    }
+    close (FILE);
+    return join "\n", keys %report;
+}
 sub different_version ($) {
     my $FILE = shift;
     my $report = '';
@@ -356,6 +370,10 @@ my @LIST = read_bulklog_dir ($BULKLOG_DIR);
 # print join "\n", @LIST;
 # print "\n";
 my %STATS;
+
+# -------------------------------------------------
+# classify @LIST into the list of each stage
+# -------------------------------------------------
 foreach my $dir (@LIST) {
 
     if ( $dir =~ /\.$/    ) { next;}
@@ -553,7 +571,7 @@ foreach my $n (sort @ADDED) {
 
 print "\n";
 # ------------------------------------------------------
-#   7.  Checksum stage error  ----
+#   7.  Depends stage error  ----
 # ------------------------------------------------------
 my @DIFFERENT_VERSION;
 my @DEPENDS_OTHER;
@@ -563,8 +581,8 @@ foreach my $i (@DEPENDS) {
     if ($different_version) { push(@DIFFERENT_VERSION, sprintf("%s%s/depends.log\t %s\n", $URL, $i, $report))}
     else                    { push(@DEPENDS_OTHER, $i);}
 }
-print '---8a. Different version  ---- (' , $#DIFFERENT_VERSION + 1, ")\n";
-print '---8. Depends stage error  ---- (' , $#DEPENDS_OTHER + 1, ")\n";
+print '---7a. Different version   ---- (' , $#DIFFERENT_VERSION + 1, ")\n";
+print '---7. Depends stage error  ---- (' , $#DEPENDS_OTHER + 1, ")\n";
 
 foreach my $i (@DEPENDS_OTHER) {
   print $URL . $i. '/depends.log'. "\n";}
@@ -573,6 +591,7 @@ print "\n";
 my @SUBST;
 my @COMPILER_CAN_NOT;
 my @REDUCE_DEPENDS;
+
 
 foreach my $i (@CONFIGURE)  {
     my $report         = check_subst             ( $BULKLOG_DIR. '/'. $i."/configure.log");
@@ -615,6 +634,7 @@ print '---9d. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 my @PLIST_INCONSISTENCY;
 my @INSTALL_not_a_PIE;
 my @WRKDIR_ref;
+my @INTERPRETER;
 
 foreach my $i ( @INSTALL)  {
     my $report;
@@ -632,6 +652,9 @@ foreach my $i ( @INSTALL)  {
     } elsif
        ( $report = check_WRKDIR_ref ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
 	push(@WRKDIR_ref,        sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
+    } elsif
+       ( $report = install_interpreter ( $BULKLOG_DIR. '/'. $i."/install.log") ) {
+	push(@INTERPRETER,        sprintf("%s%s/install.log\t %s\n", $URL, $i, $report));
     } else {
 	push(@INSTALL_OTHERS, $URL. $i."/install.log\n");
     }
@@ -673,6 +696,15 @@ print '---11e. rpath relative to WRKDIR  ---- (' , $#WRKDIR_ref + 1, ")\n";
 $count = 0;
 foreach my $i (0..$#WRKDIR_ref) {
     print $WRKDIR_ref[$i];
+    if ($count ++ > 30) { print "    ... too many, omitting  rest of the list ..\n"; last;}
+}
+print "\n";
+
+print '---11f. interpreter does not exist  ---- (' , $#WRKDIR_ref + 1, ")\n";
+# ------------------------------------------------------
+$count = 0;
+foreach my $i (0..$#INTERPRETER) {
+    print $INTERPRETER[$i];
     if ($count ++ > 30) { print "    ... too many, omitting  rest of the list ..\n"; last;}
 }
 print "\n";
