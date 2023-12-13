@@ -201,6 +201,18 @@ sub compiler_can_not_create ($) {
     close (FILE);
     return $report;
 }
+sub reduce_depends ($) {
+    my $FILE = shift;
+    my $report = '';
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {
+	if (/ERROR: \[reduce-depends.awk\] ..\/..\/(.* does not exist.)/ ) {
+	    $report .= $1;
+	}
+    }
+    close (FILE);
+    return $report;
+}
 sub different_version ($) {
     my $FILE = shift;
     my $report = '';
@@ -560,12 +572,15 @@ print "\n";
 
 my @SUBST;
 my @COMPILER_CAN_NOT;
+my @REDUCE_DEPENDS;
 
 foreach my $i (@CONFIGURE)  {
-    my $report   = check_subst             ( $BULKLOG_DIR. '/'. $i."/configure.log");
-    my $compiler = compiler_can_not_create ( $BULKLOG_DIR. '/'. $i."/configure.log");
-    if    ($report   ) { push(@SUBST,            sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
-    elsif ($compiler ) { push(@COMPILER_CAN_NOT, sprintf("%s%s/configure.log\n",      $URL, $i         ))}
+    my $report         = check_subst             ( $BULKLOG_DIR. '/'. $i."/configure.log");
+    my $compiler       = compiler_can_not_create ( $BULKLOG_DIR. '/'. $i."/configure.log");
+    my $reduce_depends = reduce_depends          ( $BULKLOG_DIR. '/'. $i."/configure.log");
+    if    ($report   ) { push(@SUBST,                sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
+    elsif ($compiler ) { push(@COMPILER_CAN_NOT,     sprintf("%s%s/configure.log\n",      $URL, $i         ))}
+    elsif ($reduce_depends ) { push(@REDUCE_DEPENDS, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $reduce_depends  ))}
     else               { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
 
@@ -586,7 +601,10 @@ print '---9a. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
 print '---9b. Compiler can not create executable ---- (' , $#COMPILER_CAN_NOT + 1, ")\n";
      print @COMPILER_CAN_NOT ; print "\n";
 
-print '---9c. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+print '---9c. Reduce depends error  ---- (' , $#REDUCE_DEPENDS + 1, ")\n";
+     print @REDUCE_DEPENDS ; print "\n";
+
+print '---9d. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 
            @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
      print @CONFIGURE_OTHER ; print "\n";
