@@ -227,6 +227,19 @@ sub install_interpreter ($) {
     close (FILE);
     return join "\n", keys %report;
 }
+sub patch_issue ($) {
+    my $FILE = shift;
+    my %report = '';
+    open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
+    while(<FILE>) {
+           if (/ERROR: Patching failed due to modified or broken patch file\(s\):/ ) {
+	    $report{$1}++ ;
+	}
+    }
+    close (FILE);
+    return join "\n", keys %report ;
+}
+
 sub different_version ($) {
     my $FILE = shift;
     my $report = '';
@@ -591,15 +604,18 @@ print "\n";
 my @SUBST;
 my @COMPILER_CAN_NOT;
 my @REDUCE_DEPENDS;
-
+my @CONFIGURE_OTHER;
+my @CONFIGURE_PATCH;
 
 foreach my $i (@CONFIGURE)  {
     my $report         = check_subst             ( $BULKLOG_DIR. '/'. $i."/configure.log");
     my $compiler       = compiler_can_not_create ( $BULKLOG_DIR. '/'. $i."/configure.log");
     my $reduce_depends = reduce_depends          ( $BULKLOG_DIR. '/'. $i."/configure.log");
+    my $patch_issue    = patch_issue             ( $BULKLOG_DIR. '/'. $i."/configure.log");
     if    ($report   ) { push(@SUBST,                sprintf("%s%s/configure.log\t %s\n", $URL, $i, $report))}
     elsif ($compiler ) { push(@COMPILER_CAN_NOT,     sprintf("%s%s/configure.log\n",      $URL, $i         ))}
     elsif ($reduce_depends ) { push(@REDUCE_DEPENDS, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $reduce_depends  ))}
+    elsif ($patch_issue    ) { push(@CONFIGURE_PATCH, sprintf("%s%s/configure.log\t %s\n", $URL, $i, $patch_issue  ))}
     else               { push(@CONFIGURE_OTHER, $URL. $i."/configure.log\n");}
 }
 
@@ -614,7 +630,7 @@ foreach my $i (@CHECKSUM) {
 print "\n";
 
 
-# -------------------------------
+# -------------------------------p
 print '---9a. SUBST error at configure ---- (' , $#SUBST + 1, ")\n";
      print @SUBST ; print "\n";
 print '---9b. Compiler can not create executable ---- (' , $#COMPILER_CAN_NOT + 1, ")\n";
@@ -623,7 +639,10 @@ print '---9b. Compiler can not create executable ---- (' , $#COMPILER_CAN_NOT + 
 print '---9c. Reduce depends error  ---- (' , $#REDUCE_DEPENDS + 1, ")\n";
      print @REDUCE_DEPENDS ; print "\n";
 
-print '---9d. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
+print '---9d. Patching problem ---- (' , $#CONFIGURE_PATCH + 1, ")\n";
+           @CONFIGURE_PATCH = sort @CONFIGURE_PATCH;
+
+print '---9e. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 
            @CONFIGURE_OTHER  = sort @CONFIGURE_OTHER;
      print @CONFIGURE_OTHER ; print "\n";
