@@ -232,7 +232,10 @@ sub patch_issue ($) {
     my %report = '';
     open(FILE, $FILE) || die "Unable to open input file $FILE: $! \n";
     while(<FILE>) {
-           if (/ERROR: Patching failed due to modified or broken patch file\(s\):/ ) {
+#	if (/ERROR: Patching failed due to modified or broken patch file\(s\):/ ) {
+#	     ERROR: Patching failed due to modified or broken patch file(s):
+#            Patch /amd/pkgsrc/CHROOT/P/pkgsrc/sysutils/e2fsprogs/patches/patch-scrub_Makefile.in failed
+	if (m,Patch .*(patches/patch-.*) failed,) {
 	    $report{$1}++ ;
 	}
     }
@@ -641,6 +644,7 @@ print '---9c. Reduce depends error  ---- (' , $#REDUCE_DEPENDS + 1, ")\n";
 
 print '---9d. Patching problem ---- (' , $#CONFIGURE_PATCH + 1, ")\n";
            @CONFIGURE_PATCH = sort @CONFIGURE_PATCH;
+     print @CONFIGURE_PATCH ; print "\n";
 
 print '---9e. OTHER configure error  ---- (' , $#CONFIGURE_OTHER + 1, ")\n";
 
